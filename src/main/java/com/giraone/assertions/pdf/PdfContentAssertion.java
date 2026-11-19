@@ -1,0 +1,418 @@
+package com.giraone.assertions.pdf;
+
+import com.giraone.assertions.pdf.model.RectangleInMm;
+import com.giraone.assertions.pdf.model.TextInRectangle;
+import org.apache.pdfbox.Loader;
+import org.apache.pdfbox.pdmodel.PDDocument;
+import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
+import org.apache.pdfbox.pdmodel.PDDocumentInformation;
+import org.apache.pdfbox.pdmodel.common.PDMetadata;
+import org.apache.pdfbox.preflight.ValidationResult;
+import org.apache.pdfbox.preflight.parser.PreflightParser;
+import org.apache.pdfbox.text.PDFTextStripper;
+import org.assertj.core.api.AbstractAssert;
+import org.w3c.dom.Document;
+import org.w3c.dom.Node;
+
+import javax.xml.parsers.DocumentBuilder;
+import javax.xml.parsers.DocumentBuilderFactory;
+import javax.xml.xpath.XPath;
+import javax.xml.xpath.XPathConstants;
+import javax.xml.xpath.XPathFactory;
+import java.io.*;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.List;
+import java.util.function.Function;
+
+/**
+ * A custom assertion class, to check whether a PDF contains a certain data, e.g. a certain text [in a certain region].
+ * Should be used like this - here the PDF is read and parsed only once:
+ * <code>
+ * byte[] pdfBytes = ...
+ * PdfContentAssertion.assertThat(pdfBytes)
+ * .isValidPdf()
+ * .containsTextStringAtPosition(1, new RectangleInMm(60, 80, 160, 120), "PDF Overlay")
+ * .containsTextStringAtPosition(1, new RectangleInMm(60, 100, 160, 140), "Feld A")
+ * .containsTextStringAtPosition(1, new RectangleInMm(60, 120, 160, 160), "Feld B")
+ * .containsTextStringAtPosition(2, new RectangleInMm(60, 80, 160, 120), "PDF Overlay")
+ * .containsTextStringAtPosition(2, new RectangleInMm(60, 100, 160, 140), "Feld C")
+ * .containsTextStringAtPosition(2, new RectangleInMm(60, 120, 160, 160), "Feld D");
+ * </code>
+ */
+public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byte[]> {
+
+    private static final float EPSILON = 0.05f;
+
+    String allText;
+    Integer actualNumberOfPages;
+    PDDocumentInformation documentInformation;
+    String xmpMetaData;
+    List<TextLocation> locations;
+    PointAdaption pointAdaption;
+    ScaleAdaption scaleAdaption;
+
+    public PdfContentAssertion(byte[] bytes, PointAdaption pointAdaption, ScaleAdaption scaleAdaption) {
+        super(bytes, PdfContentAssertion.class);
+        this.pointAdaption = pointAdaption;
+        this.scaleAdaption = scaleAdaption;
+    }
+
+    public static PdfContentAssertion assertThat(File actual) {
+        try {
+            byte[] bytes = Files.readAllBytes(actual.toPath());
+            return assertThat(bytes);
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to read PDF file: " + actual, e);
+        }
+    }
+    public static PdfContentAssertion assertThat(byte[] actual) {
+        return new PdfContentAssertion(actual, new PointAdaption(), new ScaleAdaption());
+    }
+
+    //------------------------------------------------------------------------------------------------------------------
+
+    @SuppressWarnings("unused")
+    public PdfContentAssertion withPointAdaption(PointAdaption pointAdaption) {
+        this.pointAdaption = pointAdaption;
+        return this;
+    }
+
+    @SuppressWarnings("unused")
+    public PdfContentAssertion withScaleAdaption(ScaleAdaption scaleAdaption) {
+        this.scaleAdaption = scaleAdaption;
+        return this;
+    }
+
+    public PdfContentAssertion isValidPdf() {
+
+        if (this.actual == null) {
+            failWithMessage("PDF bytes are null");
+            return this;
+        }
+        if (this.actual.length < 50) {
+            failWithMessage("PDF bytes are too small! Expected at least 50 bytes, but was " + this.actual.length);
+            return this;
+        }
+        final String magicIntro = new String(this.actual, 0, 5);
+        if (!"%PDF-".equals(magicIntro)) {
+            failWithMessage("PDF does not start with %PDF-, it was \"" + magicIntro + "\"");
+            return this;
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion isNotValidPdf() {
+
+        if (this.actual == null) {
+            return this;
+        }
+        if (this.actual.length < 50) {
+            return this;
+        }
+        final String magicIntro = new String(this.actual, 0, 5);
+        if (!"%PDF-".equals(magicIntro)) {
+            return this;
+        }
+        failWithMessage("PDF seems to be valid");
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion isValidPdfA() throws IOException {
+
+        if (this.actual == null) {
+            failWithMessage("PDF bytes are null");
+            return this;
+        }
+
+        if (this.actual.length < 50) {
+            failWithMessage("PDF bytes are too small! Expected at least 50 bytes, but was " + this.actual.length);
+            return this;
+        }
+
+        final Path pdf = Files.createTempFile("rrs-assertion-", ".pdf");
+        try {
+            Files.write(pdf, this.actual);
+            final ValidationResult result = PreflightParser.validate(pdf.toFile());
+            if (!result.isValid()) {
+                final StringBuilder sb = new StringBuilder("PDF is not PDF/A!");
+                // for interpretation of error codes see:
+                // https://github.com/apache/pdfbox/blob/trunk/preflight/src/main/java/org/apache/pdfbox/preflight/PreflightConstants.java
+                for (ValidationResult.ValidationError error : result.getErrorsList()) {
+                    sb.append(System.lineSeparator()).append(error.getErrorCode()).append(" : ").append(error.getDetails());
+                }
+                failWithMessage(sb.toString());
+            }
+        } finally {
+            Files.deleteIfExists(pdf);
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertDocumentTitle(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(documentInformation != null ? documentInformation.getTitle() : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertDocumentSubject(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(documentInformation != null ? documentInformation.getSubject() : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertDocumentAuthor(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(documentInformation != null ? documentInformation.getAuthor() : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertDocumentCreator(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(documentInformation != null ? documentInformation.getCreator() : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertXmpDocumentTitle(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(xmpMetaData != null ? extractXPath(xmpMetaData, "//*[name()='dc:title']//*[name()='rdf:li']") : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertXmpDocumentAuthor(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(xmpMetaData != null ? extractXPath(xmpMetaData, "//*[name()='dc:creator']//*[name()='rdf:li']") : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion hasNumberOfPages(int expectedNumberOfPages) {
+
+        isNotNull();
+        init();
+        if (actualNumberOfPages != expectedNumberOfPages) {
+            failWithMessage("Expected PDF to contain %d pages, but there are %d pages!",
+                expectedNumberOfPages, actualNumberOfPages);
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion containsTextStringOnAnyPage(String text) {
+
+        isNotNull();
+        if (allText == null) {
+            try {
+                allText = readAndParseTextFromPdf();
+            } catch (IOException e) {
+                e.printStackTrace();
+                failWithMessage("Cannot parse PDF to check, if it contains \"%s\"!", text);
+                return this;
+            }
+        }
+        if (!allText.contains(text)) {
+            failWithMessage("Expected PDF to contain \"%s\", but there was none in:\r\n%s", text, allText);
+        }
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion apply(TextInRectangle textInRectangle) {
+        return containsTextStringAtPosition(textInRectangle.page(), textInRectangle.rectangle(), textInRectangle.exactText());
+    }
+
+    /**
+     * Tests, whether the given text is on a given page with a given area
+     * @param page  page number
+     * @param position page area - hint: the area of the complete paragraph is checked!
+     * @param text the text to be contained
+     * @return assertion object
+     */
+    public PdfContentAssertion containsTextStringAtPosition(int page, RectangleInMm position, String text) {
+
+        isNotNull();
+        if (locations == null) {
+            try {
+                locations = readAndParseTextLocationsFromPdf();
+            } catch (IOException e) {
+                e.printStackTrace();
+                failWithMessage("Cannot parse PDF to check, if it contains \"%s\" within %s on page %d!",
+                    text, position, page);
+                return this;
+            }
+        }
+
+        if (!containsAtPosition(locations, position, text, page)) {
+            failWithMessage("Expected PDF to contain \"%s\" within %s on page %d there was none in: %s",
+                text, position, page, dumpAllLocations());
+        }
+        return this;
+    }
+
+    //------------------------------------------------------------------------------------------------------------------
+
+    @SuppressWarnings("UnusedReturnValue")
+    private boolean init() {
+        if (actualNumberOfPages == null) {
+            try (PDDocument document = Loader.loadPDF(this.actual)) {
+                actualNumberOfPages = document.getNumberOfPages();
+                documentInformation = document.getDocumentInformation();
+                xmpMetaData = readXmlMetaData(document);
+            } catch (IOException e) {
+                e.printStackTrace();
+                failWithMessage("Cannot parse PDF to check its number of pages!");
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String readXmlMetaData(PDDocument document ) throws IOException {
+        /*
+<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">
+  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+    <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" rdf:about="">
+      <pdfaid:conformance>U</pdfaid:conformance>
+      <pdfaid:part>3</pdfaid:part>
+    </rdf:Description>
+    <rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" rdf:about="">
+      <xmp:CreateDate>2020-03-31T09:32:59+02:00</xmp:CreateDate>
+      <xmp:ModifyDate>2020-03-31T09:32:59+02:00</xmp:ModifyDate>
+      <xmp:MetadataDate>2020-03-31T09:32:59+02:00</xmp:MetadataDate>
+      <xmp:CreatorTool>DATEV</xmp:CreatorTool>
+    </rdf:Description>
+    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
+      <dc:title>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">Brutto-Netto Abrechnung</rdf:li>
+        </rdf:Alt>
+      </dc:title>
+      <dc:creator>
+        <rdf:Seq>
+          <rdf:li>DATEV</rdf:li>
+        </rdf:Seq>
+      </dc:creator>
+      <dc:description>
+        <rdf:Alt>
+          <rdf:li xml:lang="x-default">Die Brutto-Netto Abrechnung eines Arbeitnehmers.</rdf:li>
+        </rdf:Alt>
+      </dc:description>
+    </rdf:Description>
+    <rdf:Description xmlns:pdf="http://ns.adobe.com/pdf/1.3/" rdf:about="">
+      <pdf:Keywords>brutto;netto;abrechnung;brutto-netto;datev;</pdf:Keywords>
+      <pdf:Producer>DATEV</pdf:Producer>
+    </rdf:Description>
+  </rdf:RDF>
+</x:xmpmeta><?xpacket end="w"?>
+      */
+
+        PDDocumentCatalog catalog = document.getDocumentCatalog();
+        PDMetadata metadata = catalog.getMetadata();
+        if (metadata == null) {
+            return null;
+        }
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try (InputStream x = metadata.exportXMPMetadata()) {
+            byte[] b = new byte[1024];
+            int r;
+            while ((r = x.read(b)) > 0) {
+                out.write(b, 0, r);
+            }
+        }
+        return out.toString(StandardCharsets.UTF_8);
+    }
+
+    static String extractXPath(String xmlInputString, String xPathExpression) {
+
+        try {
+            DocumentBuilderFactory builderFactory = DocumentBuilderFactory.newInstance();
+            DocumentBuilder builder = builderFactory.newDocumentBuilder();
+            Document xmlDocument = builder.parse(new ByteArrayInputStream(xmlInputString.getBytes(StandardCharsets.UTF_8)));
+            XPath xPath = XPathFactory.newInstance().newXPath();
+            Node node = (Node) xPath.compile(xPathExpression).evaluate(xmlDocument, XPathConstants.NODE);
+            return node != null ? node.getTextContent() : null;
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private String readAndParseTextFromPdf() throws IOException {
+
+        // From: https://www.tutorialspoint.com/pdfbox/pdfbox_reading_text.htm
+        try (PDDocument document = Loader.loadPDF(this.actual)) {
+            final PDFTextStripper pdfStripper = new PDFTextStripper();
+            return pdfStripper.getText(document);
+        }
+    }
+
+    private List<TextLocation> readAndParseTextLocationsFromPdf() throws IOException {
+
+        List<TextLocation> locations;
+        try (PDDocument document = Loader.loadPDF(this.actual)) {
+            PdfTextLocator pdfTextLocator = new PdfTextLocator(document, this.pointAdaption, this.scaleAdaption);
+            locations = pdfTextLocator.retrieveLocations();
+        }
+        return locations;
+    }
+
+    private boolean containsAtPosition(List<TextLocation> locations, RectangleInMm position, String text, int page) {
+
+        for (TextLocation location : locations) {
+            if (location.text().contains(text) && isWithIn(location, position) && isOnSamePage(location, page)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isOnSamePage(TextLocation location, int page) {
+        return location.page() == page;
+    }
+
+    private boolean isWithIn(TextLocation location, RectangleInMm position) {
+
+        return (location.x() > position.leftUpperX() || fuzzyEquals(location.x(), position.leftUpperX()))
+            && (location.getRightLowerX() < position.rightLowerX() || fuzzyEquals(location.getRightLowerX(), position.rightLowerX()))
+            && (location.y() >= position.leftUpperY() || fuzzyEquals(location.y(), position.leftUpperY()))
+            && (location.getRightLowerY() <= position.rightLowerY() || fuzzyEquals(location.getRightLowerY(), position.rightLowerY()));
+    }
+
+    private static boolean fuzzyEquals (float a, float b) {
+        if (a==b) {
+            return true;
+        }
+        return Math.abs(a - b) < EPSILON;
+    }
+
+    private String dumpAllLocations() {
+
+        StringBuilder ret = new StringBuilder();
+        for (TextLocation location : locations) {
+            ret.append("\r\n- \"").append(location.printPos()).append(" = \"").append(location.text()).append("\"")
+                .append(" on page ").append(location.page());
+        }
+        return ret.toString();
+    }
+}
