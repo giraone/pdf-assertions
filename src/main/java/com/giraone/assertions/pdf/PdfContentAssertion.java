@@ -144,7 +144,7 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
                 for (ValidationResult.ValidationError error : result.getErrorsList()) {
                     sb.append(System.lineSeparator()).append(error.getErrorCode()).append(" : ").append(error.getDetails());
                 }
-                failWithMessage(sb.toString());
+                failWithMessage(sb.toString().replace("%", "%%"));
             }
         } finally {
             Files.deleteIfExists(pdf);

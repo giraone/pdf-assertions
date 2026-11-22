@@ -2,6 +2,7 @@ package com.giraone.assertions.pdf;
 
 import com.giraone.assertions.pdf.model.RectangleInMm;
 import org.assertj.core.api.Assertions;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -24,6 +25,8 @@ class PdfContentAssertionTest {
             "pdf-3p-v1.3-by-FPDF.pdf |  3 | NVIDIA GeForce      |                                    |                               |                  | FPDF 1.53                          |",
             "pdf-3p-v1.3-props.pdf   |  3 | Three long pages    | Sample PDF                         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
             "pdf-28p-v1.3-text.pdf   | 28 | Chinese foo         |                                    | TeX                           |                  | pdfTeX-0.14f                       |",
+            "pdf-1p-v2.0.pdf         |  1 | Hello World         |                                    |                               |                  |                                    |",
+
     }, delimiter = '|')
     void basicAssertions_basicallyWork(String fileName, int expectedPages,
                                        String expectedText, String expectedTitle,
@@ -113,6 +116,16 @@ class PdfContentAssertionTest {
                 .isEqualTo("THIRD");
     }
 
+
+    @Disabled
+    @Test
+    void isValidPdfA() throws IOException {
+        // arrange
+        byte[] pdfBytes1 = readTestPdfA();
+        // act/assert
+        PdfContentAssertion.assertThat(pdfBytes1).isValidPdfA();
+    }
+
     //------------------------------------------------------------------------------------------------------------------
 
     private byte[] readTestPdfWithOnePage() throws IOException {
@@ -125,5 +138,9 @@ class PdfContentAssertionTest {
 
     private byte[] readTestPdfWithProperties() throws IOException {
         return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-1p-v1.4-by-dist.pdf"));
+    }
+
+    private byte[] readTestPdfA() throws IOException {
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdfa-v2.0-utf8-test.pdf"));
     }
 }
