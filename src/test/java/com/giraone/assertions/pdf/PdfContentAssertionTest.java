@@ -17,16 +17,15 @@ class PdfContentAssertionTest {
 
     @ParameterizedTest(name = "Basic Test {0}")
     @CsvSource(value = {
-            // NAME                  | PG | TEXT                | TITLE                              | CREATOR                       | AUTHOR           | PRODUCER                           |
-            "pdf-1p-v1.4-by-dist.pdf |  1 | ItalicLine 8        | Microsoft Word - sampleForSpec.rtf | Acrobat PDFMaker 6.0 for Word | Michel Felix     | Acrobat Distiller 6.0 (Windows)    |",
-            "pdf-1p-v1.4-by-oo.pdf   |  1 | Security Threat     |                                    | Writer                        |                  | OpenOffice 4.1.2                   |",
-            "pdf-1p-v1.5-text.pdf    |  1 | PDF Overlay Seite 1 |                                    |                               |                  |                                    |",
-            "pdf-2p-v1.3-text.pdf    |  2 | Carogne             | Erlkönig.pages                     | Pages                         |                  | Mac OS X 10.11.1 Quartz PDFContext |",
-            "pdf-3p-v1.3-by-FPDF.pdf |  3 | NVIDIA GeForce      |                                    |                               |                  | FPDF 1.53                          |",
-            "pdf-3p-v1.3-props.pdf   |  3 | Three long pages    | Sample PDF                         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
-            "pdf-28p-v1.3-text.pdf   | 28 | Chinese foo         |                                    | TeX                           |                  | pdfTeX-0.14f                       |",
-            "pdf-1p-v2.0.pdf         |  1 | Hello World         |                                    |                               |                  |                                    |",
-
+    // NAME                  | PG | TEXT                | TITLE                              | CREATOR                       | AUTHOR           | PRODUCER                           |
+    "pdf-1p-v1.4-by-dist.pdf |  1 | ItalicLine 8        | Microsoft Word - sampleForSpec.rtf | Acrobat PDFMaker 6.0 for Word | Michel Felix     | Acrobat Distiller 6.0 (Windows)    |",
+    "pdf-1p-v1.4-by-oo.pdf   |  1 | Security Threat     |                                    | Writer                        |                  | OpenOffice 4.1.2                   |",
+    "pdf-1p-v1.5-text.pdf    |  1 | PDF Overlay Seite 1 |                                    |                               |                  |                                    |",
+    "pdf-2p-v1.3-text.pdf    |  2 | Carogne             | Erlkönig.pages                     | Pages                         |                  | Mac OS X 10.11.1 Quartz PDFContext |",
+    "pdf-3p-v1.3-by-FPDF.pdf |  3 | NVIDIA GeForce      |                                    |                               |                  | FPDF 1.53                          |",
+    "pdf-3p-v1.3-props.pdf   |  3 | Three long pages    | Sample PDF                         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
+    "pdf-28p-v1.3-text.pdf   | 28 | Chinese foo         |                                    | TeX                           |                  | pdfTeX-0.14f                       |",
+    "pdf-1p-v2.0.pdf         |  1 | Hello World         |                                    |                               |                  |                                    |",
     }, delimiter = '|')
     void basicAssertions_basicallyWork(String fileName, int expectedPages,
                                        String expectedText, String expectedTitle,
@@ -121,9 +120,44 @@ class PdfContentAssertionTest {
     @Test
     void isValidPdfA() throws IOException {
         // arrange
-        byte[] pdfBytes1 = readTestPdfA();
+        byte[] pdfBytes = readTestPdfA("xps-3a");
         // act/assert
-        PdfContentAssertion.assertThat(pdfBytes1).isValidPdfA();
+        PdfContentAssertion.assertThat(pdfBytes).isValidPdfA();
+    }
+
+    @ParameterizedTest(name = "isValidPdfAProfile {0}")
+    @CsvSource(value = {
+        // NAME        | PROFILE |
+        "xps-3a        |      3a |",
+        //"pdf24-1b      |      1b |",
+        "pdf24-2b      |      2b |",
+        "pdf24-3b      |      3b |",
+        "pdf24-4       |       4 |",
+        //"pdf24-4f      |      4f |",
+    }, delimiter = '|')
+    void isValidPdfAProfile(String name, String profile) throws IOException {
+        // arrange
+        byte[] pdfBytes = readTestPdfA(name);
+        // act/assert
+        PdfContentAssertion.assertThat(pdfBytes).isValidPdfAProfile(profile);
+    }
+
+    @ParameterizedTest(name = "isValidPdfAProfile {0}")
+    @CsvSource(value = {
+        // NAME        | PROFILES |
+        "xps-3a        | PDFA_3_A |",
+        "pdf24-1b      | PDFA_1_B |",
+        "pdf24-2b      | PDFA_2_B |",
+        "pdf24-3b      | PDFA_3_B |",
+        "pdf24-4       | PDFA_4   |",
+        "pdf24-4f      | PDFA_4_F |",
+    }, delimiter = '|')
+    void fetchPdfAProfiles(String name, String profile) throws IOException {
+        // arrange
+        byte[] pdfBytes = readTestPdfA(name);
+        // act/assert
+        assertThat(PdfContentAssertion.assertThat(pdfBytes).fetchPdfAProfiles())
+            .containsExactlyInAnyOrder(profile);
     }
 
     //------------------------------------------------------------------------------------------------------------------
@@ -140,7 +174,7 @@ class PdfContentAssertionTest {
         return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-1p-v1.4-by-dist.pdf"));
     }
 
-    private byte[] readTestPdfA() throws IOException {
-        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdfa-v2.0-utf8-test.pdf"));
+    private byte[] readTestPdfA(String name) throws IOException {
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdf-a/" + name + ".pdf"));
     }
 }

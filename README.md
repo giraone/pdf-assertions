@@ -60,7 +60,7 @@ PdfContentAssertion.assertThat(pdfBytes)
 ### 4. PDF/A validation
 
 ```java
-PdfContentAssertion.assertThat(pdfBytes).isValidPdfA();
+PdfContentAssertion.assertThat(pdfBytes).isValidPdfAProfile("1b");
 ```
 
 ### 5. Negative check

@@ -7,10 +7,17 @@ import org.apache.pdfbox.pdmodel.PDDocument;
 import org.apache.pdfbox.pdmodel.PDDocumentCatalog;
 import org.apache.pdfbox.pdmodel.PDDocumentInformation;
 import org.apache.pdfbox.pdmodel.common.PDMetadata;
-import org.apache.pdfbox.preflight.ValidationResult;
 import org.apache.pdfbox.preflight.parser.PreflightParser;
 import org.apache.pdfbox.text.PDFTextStripper;
 import org.assertj.core.api.AbstractAssert;
+import org.verapdf.gf.foundry.VeraGreenfieldFoundryProvider;
+import org.verapdf.pdfa.Foundries;
+import org.verapdf.pdfa.PDFAParser;
+import org.verapdf.pdfa.PDFAValidator;
+import org.verapdf.pdfa.VeraPDFFoundry;
+import org.verapdf.pdfa.flavours.PDFAFlavour;
+import org.verapdf.pdfa.flavours.PDFFlavours;
+import org.verapdf.pdfa.validation.profiles.RuleId;
 import org.w3c.dom.Document;
 import org.w3c.dom.Node;
 
@@ -19,11 +26,18 @@ import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.xpath.XPath;
 import javax.xml.xpath.XPathConstants;
 import javax.xml.xpath.XPathFactory;
-import java.io.*;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Function;
 
 /**
@@ -44,6 +58,7 @@ import java.util.function.Function;
 public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byte[]> {
 
     private static final float EPSILON = 0.05f;
+    private static final AtomicBoolean VERA_PDF_INITIALIZED = new AtomicBoolean(false);
 
     String allText;
     Integer actualNumberOfPages;
@@ -71,6 +86,13 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         return new PdfContentAssertion(actual, new PointAdaption(), new ScaleAdaption());
     }
 
+    public static synchronized void initializeVeraPdf() {
+        if (!VERA_PDF_INITIALIZED.get()) {
+            VeraGreenfieldFoundryProvider.initialise();
+            VERA_PDF_INITIALIZED.set(true);
+        }
+    }
+
     //------------------------------------------------------------------------------------------------------------------
 
     @SuppressWarnings("unused")
@@ -85,6 +107,9 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         return this;
     }
 
+    /**
+     * Test, if content is valid PDF.
+     */
     public PdfContentAssertion isValidPdf() {
 
         if (this.actual == null) {
@@ -103,6 +128,9 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         return this;
     }
 
+    /**
+     * Test, if content is NOT valid PDF.
+     */
     @SuppressWarnings("UnusedReturnValue")
     public PdfContentAssertion isNotValidPdf() {
 
@@ -120,6 +148,9 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         return this;
     }
 
+    /**
+     * Test for PDF/A compatibility using PDFBox preflight.
+     */
     @SuppressWarnings("UnusedReturnValue")
     public PdfContentAssertion isValidPdfA() throws IOException {
 
@@ -136,12 +167,12 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         final Path pdf = Files.createTempFile("rrs-assertion-", ".pdf");
         try {
             Files.write(pdf, this.actual);
-            final ValidationResult result = PreflightParser.validate(pdf.toFile());
+            final org.apache.pdfbox.preflight.ValidationResult result = PreflightParser.validate(pdf.toFile());
             if (!result.isValid()) {
                 final StringBuilder sb = new StringBuilder("PDF is not PDF/A!");
                 // for interpretation of error codes see:
                 // https://github.com/apache/pdfbox/blob/trunk/preflight/src/main/java/org/apache/pdfbox/preflight/PreflightConstants.java
-                for (ValidationResult.ValidationError error : result.getErrorsList()) {
+                for (org.apache.pdfbox.preflight.ValidationResult.ValidationError error : result.getErrorsList()) {
                     sb.append(System.lineSeparator()).append(error.getErrorCode()).append(" : ").append(error.getDetails());
                 }
                 failWithMessage(sb.toString().replace("%", "%%"));
@@ -150,6 +181,83 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
             Files.deleteIfExists(pdf);
         }
         return this;
+    }
+
+    /**
+     * Test for PDF/A compatibility against a PDF/A profile, e.g. "1b", using veraPDF.
+     * @param profile Profile ("1a", "1b", "2a", "2b")
+     * @return content assertion
+     */
+    @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion isValidPdfAProfile(String profile) throws IOException {
+
+        if (this.actual == null) {
+            failWithMessage("PDF bytes are null");
+            return this;
+        }
+        if (this.actual.length < 50) {
+            failWithMessage("PDF bytes are too small! Expected at least 50 bytes, but was " + this.actual.length);
+            return this;
+        }
+
+        initializeVeraPdf();
+        PDFAFlavour flavour = PDFAFlavour.fromString(profile);
+        try (ByteArrayInputStream input = new ByteArrayInputStream(this.actual)) {
+            try (VeraPDFFoundry foundry = Foundries.defaultInstance()) {
+                try (PDFAParser parser = foundry.createParser(input, flavour)) {
+                    PDFAValidator validator = foundry.createValidator(flavour, false);
+                    org.verapdf.pdfa.results.ValidationResult result = validator.validate(parser);
+                    if (!result.isCompliant()) {
+                        Map<RuleId, Integer> failedChecks = result.getFailedChecks();
+                        StringBuilder sb = new StringBuilder();
+                        failedChecks.forEach((ruleId, failedCheck) ->
+                            sb.append(System.lineSeparator()).append(ruleId).append(" : ").append(failedCheck).append("\n"));
+                        failWithMessage("PDF is NOT compliant to PDF/A profile \"%s\"! Failed checks: %s",
+                            profile, sb.toString());
+                    }
+                } catch (Exception e) {
+                    failWithMessage("Cannot parse PDF to check for PDF/A profile \"%s\"", profile);
+                }
+            }
+        }
+        return this;
+    }
+
+    /**
+     * Fetch all PDF/A profiles defined in the document using veraPDF.
+     * @return list with profile names, e.g. "PDFA_3_A"
+     * @throws IOException on errors reading the PDF
+     */
+    public List<String> fetchPdfAProfiles() throws IOException {
+
+        if (this.actual == null) {
+            failWithMessage("PDF bytes are null");
+            return List.of();
+        }
+        if (this.actual.length < 50) {
+            failWithMessage("PDF bytes are too small! Expected at least 50 bytes, but was " + this.actual.length);
+            return List.of();
+        }
+
+        initializeVeraPdf();
+        List<String> profiles = new ArrayList<>();
+        try (ByteArrayInputStream input = new ByteArrayInputStream(this.actual)) {
+            try (VeraPDFFoundry foundry = Foundries.defaultInstance()) {
+                try (PDFAParser parser = foundry.createParser(input)) {
+                    List<PDFAFlavour> detectedFlavours = parser.getFlavours();
+                    for (PDFAFlavour flavour : detectedFlavours) {
+                        // iterate through all detected flavors and pick up PDF/A and PDF/UA ones for validation
+                        if (PDFFlavours.isFlavourFamily(flavour, PDFAFlavour.SpecificationFamily.PDF_A) ||
+                            PDFFlavours.isFlavourFamily(flavour, PDFAFlavour.SpecificationFamily.PDF_UA)) {
+                            profiles.add(flavour.name());
+                        }
+                    }
+                } catch (Exception e) {
+                    throw new RuntimeException(e);
+                }
+            }
+        }
+        return profiles;
     }
 
     @SuppressWarnings("UnusedReturnValue")
@@ -264,7 +372,6 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
             try {
                 locations = readAndParseTextLocationsFromPdf();
             } catch (IOException e) {
-                e.printStackTrace();
                 failWithMessage("Cannot parse PDF to check, if it contains \"%s\" within %s on page %d!",
                     text, position, page);
                 return this;
