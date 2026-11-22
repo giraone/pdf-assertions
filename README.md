@@ -2,7 +2,7 @@
 [![Maven Central](https://img.shields.io/badge/Maven%20Central-1.0.0-blue)](https://mvnrepository.com/artifact/com.giraone.imaging/pdf-assertions)
 [![GitHub issues](https://img.shields.io/github/issues/giraone/pdf-assertions)](https://github.com/giraone/pdf-assertions/issues)
 [![GitHub stars](https://img.shields.io/github/stars/giraone/pdf-assertions)](https://github.com/giraone/pdf-assertions/stargazers)
-[![Platform](https://img.shields.io/badge/platform-jre21%2B-blue)](https://github.com/giraone/pdf-assertions/pom.xml)
+[![Platform](https://img.shields.io/badge/platform-jre25%2B-blue)](https://github.com/giraone/pdf-assertions/pom.xml)
 
 # PDF Assertion Lib
 
