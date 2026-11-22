@@ -1,7 +1,7 @@
 package com.giraone.assertions.pdf;
 
 import com.giraone.assertions.pdf.model.RectangleInMm;
-import org.junit.jupiter.api.Disabled;
+import org.assertj.core.api.Assertions;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -14,134 +14,116 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 class PdfContentAssertionTest {
 
-    @Test
-    void assertThat_isValidPdf_basicallyWorks() throws IOException {
+    @ParameterizedTest(name = "Basic Test {0}")
+    @CsvSource(value = {
+            // NAME                  | PG | TEXT                | TITLE                              | CREATOR                       | AUTHOR           | PRODUCER                           |
+            "pdf-1p-v1.4-by-dist.pdf |  1 | ItalicLine 8        | Microsoft Word - sampleForSpec.rtf | Acrobat PDFMaker 6.0 for Word | Michel Felix     | Acrobat Distiller 6.0 (Windows)    |",
+            "pdf-1p-v1.4-by-oo.pdf   |  1 | Security Threat     |                                    | Writer                        |                  | OpenOffice 4.1.2                   |",
+            "pdf-1p-v1.5-text.pdf    |  1 | PDF Overlay Seite 1 |                                    |                               |                  |                                    |",
+            "pdf-2p-v1.3-text.pdf    |  2 | Carogne             | Erlkönig.pages                     | Pages                         |                  | Mac OS X 10.11.1 Quartz PDFContext |",
+            "pdf-3p-v1.3-by-FPDF.pdf |  3 | NVIDIA GeForce      |                                    |                               |                  | FPDF 1.53                          |",
+            "pdf-3p-v1.3-props.pdf   |  3 | Three long pages    | Sample PDF                         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
+            "pdf-28p-v1.3-text.pdf   | 28 | Chinese foo         |                                    | TeX                           |                  | pdfTeX-0.14f                       |",
+    }, delimiter = '|')
+    void basicAssertions_basicallyWork(String fileName, int expectedPages,
+                                       String expectedText, String expectedTitle,
+                                       String expectedCreator, String expectedAuthor, String expectedProducer) throws IOException {
 
         // arrange
-        byte[] pdfBytes = readTestPdfWithOnePage();
-        // assert
-        PdfContentAssertion.assertThat(pdfBytes).isValidPdf();
+        byte[] pdfBytes = Files.readAllBytes(Path.of("src/test/resources/test-pdfs", fileName));
+        // act/assert
+        PdfContentAssertion.assertThat(pdfBytes)
+                .isValidPdf()
+                .hasNumberOfPages(expectedPages)
+                .containsTextStringOnAnyPage(expectedText)
+                .assertDocumentTitle(value -> Assertions.assertThat(value).isEqualTo(expectedTitle))
+                .assertDocumentCreator(value -> Assertions.assertThat(value).isEqualTo(expectedCreator))
+                .assertDocumentProducer(value -> Assertions.assertThat(value).isEqualTo(expectedProducer))
+                .assertDocumentAuthor(value -> Assertions.assertThat(value).isEqualTo(expectedAuthor))
+        ;
     }
 
     @Test
-    void assertThat_isValidPdf_detectsHtmlPageAsInvalidPdf() {
+    void containsTextStringAtPosition_basicallyWorks() throws IOException {
+
+        // arrange
+        byte[] pdfBytes = readTestPdfWithOnePage();
+        // act/assert
+        PdfContentAssertion.assertThat(pdfBytes)
+                .isValidPdf()
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 35, 50, 45), "Feld A")
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 40, 50, 50), "Feld B");
+    }
+
+    @Test
+    void containsTextStringAtPosition_worksForMultipagePdf() throws IOException {
+
+        // arrange
+        byte[] pdfBytes = readTestPdfWithTwoPages();
+        // act/assert
+        PdfContentAssertion.assertThat(pdfBytes)
+                .isValidPdf()
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 35, 50, 45), "Feld A")
+                .containsTextStringAtPosition(1, new RectangleInMm(20, 40, 50, 50), "Feld B")
+                .containsTextStringAtPosition(2, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
+                .containsTextStringAtPosition(2, new RectangleInMm(20, 35, 50, 45), "Feld C")
+                .containsTextStringAtPosition(2, new RectangleInMm(20, 40, 50, 50), "Feld D");
+    }
+
+    @Test
+    void isValidPdf_detectsHtmlPageAsInvalidPdf() {
 
         // assert
         PdfContentAssertion.assertThat((byte[]) null).isNotValidPdf();
         PdfContentAssertion.assertThat("".getBytes()).isNotValidPdf();
         PdfContentAssertion.assertThat("%PDF-1.5".getBytes()).isNotValidPdf();
         PdfContentAssertion.assertThat(
-            "<html><body>Some large text 0123456789 0123456789 0123456789 0123456789 0123456789</body></html>"
-                .getBytes()).isNotValidPdf();
+                "<html><body>Some large text 0123456789 0123456789 0123456789 0123456789 0123456789</body></html>"
+                        .getBytes()).isNotValidPdf();
     }
 
-    @Disabled
     @Test
-    void assertThat_assertDocumentTitle_basicallyWorks() throws IOException {
+    void assertXmpDocumentTitle_basicallyWorks() throws IOException {
 
         // arrange
-        byte[] pdfBytes = readTestPdfWithThreePagesAndTitle();
+        byte[] pdfBytes = readTestPdfWithProperties();
         // act/assert
         PdfContentAssertion.assertThat(pdfBytes)
-            .assertDocumentTitle((value) -> assertThat(value)
-                .isEqualTo("Sample PDF"));
-    }
-
-    @Disabled
-    @Test
-    void assertThat_assertXmpDocumentTitle_basicallyWorks() throws IOException {
-
-        // arrange
-        byte[] pdfBytes = readTestPdfWithThreePagesAndTitle();
-        // act/assert
-        PdfContentAssertion.assertThat(pdfBytes)
-            .assertXmpDocumentTitle((value) -> assertThat(value)
-                .isEqualTo("Sample PDF"));
-    }
-
-    @ParameterizedTest
-    @CsvSource({
-        "pdf-with-some-text.pdf, 1",
-        "pdf-with-two-pages-and-some-text.pdf, 2",
-        "pdf-with-three-pages-and-title.pdf, 3"
-    })
-    void assertThat_hasNumberOfPages_basicallyWorks(String fileName, int expectedPages) throws IOException {
-
-        // arrange
-        byte[] pdfBytes = Files.readAllBytes(Path.of("src/test/resources/test-pdfs", fileName));
-        // act/assert
-        PdfContentAssertion.assertThat(pdfBytes).isValidPdf();
-        PdfContentAssertion.assertThat(pdfBytes).hasNumberOfPages(expectedPages);
+                .assertXmpDocumentTitle((value) -> assertThat(value)
+                        .isEqualTo("Microsoft Word - sampleForSpec.rtf"));
     }
 
     @Test
-    void assertThat_containsTextStringOnAnyPage_basicallyWorks() throws IOException {
-
-        // arrange
-        byte[] pdfBytes = readTestPdfWithOnePage();
-        // act/assert
-        PdfContentAssertion.assertThat(pdfBytes).isValidPdf();
-        PdfContentAssertion.assertThat(pdfBytes).containsTextStringOnAnyPage("Feld");
-    }
-
-    @Test
-    void assertThat_containsTextStringAtPosition_basicallyWorks() throws IOException {
-
-        // arrange
-        byte[] pdfBytes = readTestPdfWithOnePage();
-        // act/assert
-        PdfContentAssertion.assertThat(pdfBytes)
-            .isValidPdf()
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 35, 50, 45), "Feld A")
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 40, 50, 50), "Feld B");
-    }
-
-    @Test
-    void assertThat_containsTextStringAtPosition_worksForMultipagePdf() throws IOException {
-
-        // arrange
-        byte[] pdfBytes = readTestPdfWithTwoPages();
-        // act/assert
-        PdfContentAssertion.assertThat(pdfBytes)
-            .isValidPdf()
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 35, 50, 45), "Feld A")
-            .containsTextStringAtPosition(1, new RectangleInMm(20, 40, 50, 50), "Feld B")
-            .containsTextStringAtPosition(2, new RectangleInMm(20, 30, 100, 40), "PDF Overlay")
-            .containsTextStringAtPosition(2, new RectangleInMm(20, 35, 50, 45), "Feld C")
-            .containsTextStringAtPosition(2, new RectangleInMm(20, 40, 50, 50), "Feld D");
-    }
-
-    @Test
-    void  assertThat_extractXPath_worksBasically() {
+    void extractXPath_worksBasically() {
 
         // Some XPath expressions ...
         assertThat(PdfContentAssertion.extractXPath("<first>FIRST</first>",
-            "/first"))
-            .isEqualTo("FIRST");
+                "/first"))
+                .isEqualTo("FIRST");
         assertThat(PdfContentAssertion.extractXPath("<first><second>SECOND</second></first>",
-            "//second"))
-            .isEqualTo("SECOND");
+                "//second"))
+                .isEqualTo("SECOND");
         assertThat(PdfContentAssertion.extractXPath("<rdf:first><rdf:second>SECOND</rdf:second></rdf:first>",
-            "//*[name()='rdf:second']"))
-            .isEqualTo("SECOND");
+                "//*[name()='rdf:second']"))
+                .isEqualTo("SECOND");
         assertThat(PdfContentAssertion.extractXPath("<rdf:first><rdf:second><rdf:third>THIRD</rdf:third></rdf:second></rdf:first>",
-            "//*[name()='rdf:first']//*[name()='rdf:third']"))
-            .isEqualTo("THIRD");
+                "//*[name()='rdf:first']//*[name()='rdf:third']"))
+                .isEqualTo("THIRD");
     }
 
     //------------------------------------------------------------------------------------------------------------------
 
     private byte[] readTestPdfWithOnePage() throws IOException {
-        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-with-some-text.pdf"));
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-1p-v1.5-text.pdf"));
     }
 
     private byte[] readTestPdfWithTwoPages() throws IOException {
-        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-with-two-pages-and-some-text.pdf"));
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-2p-v1.5-text.pdf"));
     }
 
-    private byte[] readTestPdfWithThreePagesAndTitle() throws IOException {
-        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-with-three-pages-and-title.pdf"));
+    private byte[] readTestPdfWithProperties() throws IOException {
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-1p-v1.4-by-dist.pdf"));
     }
 }

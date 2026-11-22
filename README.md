@@ -1,8 +1,10 @@
 # pdf-assertions
 
 [AssertJ](https://assertj.github.io/doc/) style custom assertions for PDF documents. The goal is to verify the content
-of generated PDFs in unit tests: validity, number of pages, document metadata (info dictionary and XMP), PDF/A
-compliance and - most notably - whether a text appears on a page, optionally inside a given rectangle (in millimeters).
+of generated PDFs in unit tests: validity, number of pages, document metadata (info dictionary and XMP),
+PDF/A compliance and - most notably - whether a text appears on a page, optionally inside a given rectangle
+(in millimeters).
+
 The PDF is parsed only once per assertion chain.
 
 ## Technologies

@@ -49,11 +49,11 @@ public class PdfTextLocator extends PDFTextStripper {
 
         final TextLocation location = new TextLocation(
             text.trim(), getCurrentPageNo(),
-            pointAdaption.x + posFirst.getXDirAdj() * MM_PER_POINT * scaleAdaption.xScale,
-            pointAdaption.y + posFirst.getYDirAdj() * MM_PER_POINT * scaleAdaption.yScale,
-            (posLast.getXDirAdj() + posLast.getWidthDirAdj() - posFirst.getXDirAdj()) * MM_PER_POINT * scaleAdaption.xScale,
+            pointAdaption.x() + posFirst.getXDirAdj() * MM_PER_POINT * scaleAdaption.xScale(),
+            pointAdaption.y() + posFirst.getYDirAdj() * MM_PER_POINT * scaleAdaption.yScale(),
+            (posLast.getXDirAdj() + posLast.getWidthDirAdj() - posFirst.getXDirAdj()) * MM_PER_POINT * scaleAdaption.xScale(),
             // we document only the height of the first character!
-            posFirst.getHeight() * MM_PER_POINT * scaleAdaption.yScale
+            posFirst.getHeight() * MM_PER_POINT * scaleAdaption.yScale()
         );
         /*
         final TextLocation location = new TextLocation(

@@ -68,6 +68,6 @@ class PdfTextLocatorTest {
     //------------------------------------------------------------------------------------------------------------------
 
     private byte[] readTestPdfWithOnePage() throws IOException {
-        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-with-some-text.pdf"));
+        return Files.readAllBytes(Path.of("src/test/resources/test-pdfs/pdf-1p-v1.5-text.pdf"));
     }
 }

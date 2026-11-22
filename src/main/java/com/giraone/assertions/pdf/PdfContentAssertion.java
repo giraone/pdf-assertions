@@ -180,6 +180,15 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
     }
 
     @SuppressWarnings("UnusedReturnValue")
+    public PdfContentAssertion assertDocumentProducer(Function<String,Object> assertFunction) {
+
+        isNotNull();
+        init();
+        assertFunction.apply(documentInformation != null ? documentInformation.getProducer() : null);
+        return this;
+    }
+
+    @SuppressWarnings("UnusedReturnValue")
     public PdfContentAssertion assertDocumentCreator(Function<String,Object> assertFunction) {
 
         isNotNull();
@@ -226,8 +235,7 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
             try {
                 allText = readAndParseTextFromPdf();
             } catch (IOException e) {
-                e.printStackTrace();
-                failWithMessage("Cannot parse PDF to check, if it contains \"%s\"!", text);
+                failWithMessage("Cannot parse PDF to check, if it contains \"%s\"! %s", text, e.getMessage());
                 return this;
             }
         }
@@ -277,64 +285,40 @@ public class PdfContentAssertion extends AbstractAssert<PdfContentAssertion, byt
         if (actualNumberOfPages == null) {
             try (PDDocument document = Loader.loadPDF(this.actual)) {
                 actualNumberOfPages = document.getNumberOfPages();
-                documentInformation = document.getDocumentInformation();
+                documentInformation = copyOf(document.getDocumentInformation());
                 xmpMetaData = readXmlMetaData(document);
             } catch (IOException e) {
-                e.printStackTrace();
-                failWithMessage("Cannot parse PDF to check its number of pages!");
+                failWithMessage("Cannot parse PDF to check its number of pages! %s", e.getMessage());
                 return true;
             }
         }
         return false;
     }
 
-    private String readXmlMetaData(PDDocument document ) throws IOException {
-        /*
-<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta xmlns:x="adobe:ns:meta/">
-  <rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
-    <rdf:Description xmlns:pdfaid="http://www.aiim.org/pdfa/ns/id/" rdf:about="">
-      <pdfaid:conformance>U</pdfaid:conformance>
-      <pdfaid:part>3</pdfaid:part>
-    </rdf:Description>
-    <rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" rdf:about="">
-      <xmp:CreateDate>2020-03-31T09:32:59+02:00</xmp:CreateDate>
-      <xmp:ModifyDate>2020-03-31T09:32:59+02:00</xmp:ModifyDate>
-      <xmp:MetadataDate>2020-03-31T09:32:59+02:00</xmp:MetadataDate>
-      <xmp:CreatorTool>DATEV</xmp:CreatorTool>
-    </rdf:Description>
-    <rdf:Description xmlns:dc="http://purl.org/dc/elements/1.1/" rdf:about="">
-      <dc:title>
-        <rdf:Alt>
-          <rdf:li xml:lang="x-default">Brutto-Netto Abrechnung</rdf:li>
-        </rdf:Alt>
-      </dc:title>
-      <dc:creator>
-        <rdf:Seq>
-          <rdf:li>DATEV</rdf:li>
-        </rdf:Seq>
-      </dc:creator>
-      <dc:description>
-        <rdf:Alt>
-          <rdf:li xml:lang="x-default">Die Brutto-Netto Abrechnung eines Arbeitnehmers.</rdf:li>
-        </rdf:Alt>
-      </dc:description>
-    </rdf:Description>
-    <rdf:Description xmlns:pdf="http://ns.adobe.com/pdf/1.3/" rdf:about="">
-      <pdf:Keywords>brutto;netto;abrechnung;brutto-netto;datev;</pdf:Keywords>
-      <pdf:Producer>DATEV</pdf:Producer>
-    </rdf:Description>
-  </rdf:RDF>
-</x:xmpmeta><?xpacket end="w"?>
-      */
+    // Values may be indirect objects, which cannot be resolved once the document is closed
+    private static PDDocumentInformation copyOf(PDDocumentInformation source) {
+        if (source == null) {
+            return null;
+        }
+        final PDDocumentInformation copy = new PDDocumentInformation();
+        copy.setTitle(source.getTitle());
+        copy.setSubject(source.getSubject());
+        copy.setAuthor(source.getAuthor());
+        copy.setProducer(source.getProducer());
+        copy.setCreator(source.getCreator());
+        return copy;
+    }
 
-        PDDocumentCatalog catalog = document.getDocumentCatalog();
-        PDMetadata metadata = catalog.getMetadata();
+    private String readXmlMetaData(PDDocument document ) throws IOException {
+
+        final PDDocumentCatalog catalog = document.getDocumentCatalog();
+        final PDMetadata metadata = catalog.getMetadata();
         if (metadata == null) {
             return null;
         }
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        final ByteArrayOutputStream out = new ByteArrayOutputStream();
         try (InputStream x = metadata.exportXMPMetadata()) {
-            byte[] b = new byte[1024];
+            final byte[] b = new byte[1024];
             int r;
             while ((r = x.read(b)) > 0) {
                 out.write(b, 0, r);
