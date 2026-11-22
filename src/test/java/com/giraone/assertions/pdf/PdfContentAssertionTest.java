@@ -17,18 +17,19 @@ class PdfContentAssertionTest {
 
     @ParameterizedTest(name = "Basic Test {0}")
     @CsvSource(value = {
-    // NAME                  | PG | TEXT                | TITLE                              | CREATOR                       | AUTHOR           | PRODUCER                           |
-    "pdf-1p-v1.4-by-dist.pdf |  1 | ItalicLine 8        | Microsoft Word - sampleForSpec.rtf | Acrobat PDFMaker 6.0 for Word | Michel Felix     | Acrobat Distiller 6.0 (Windows)    |",
-    "pdf-1p-v1.4-by-oo.pdf   |  1 | Security Threat     |                                    | Writer                        |                  | OpenOffice 4.1.2                   |",
-    "pdf-1p-v1.5-text.pdf    |  1 | PDF Overlay Seite 1 |                                    |                               |                  |                                    |",
-    "pdf-2p-v1.3-text.pdf    |  2 | Carogne             | Erlkönig.pages                     | Pages                         |                  | Mac OS X 10.11.1 Quartz PDFContext |",
-    "pdf-3p-v1.3-by-FPDF.pdf |  3 | NVIDIA GeForce      |                                    |                               |                  | FPDF 1.53                          |",
-    "pdf-3p-v1.3-props.pdf   |  3 | Three long pages    | Sample PDF                         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
-    "pdf-28p-v1.3-text.pdf   | 28 | Chinese foo         |                                    | TeX                           |                  | pdfTeX-0.14f                       |",
-    "pdf-1p-v2.0.pdf         |  1 | Hello World         |                                    |                               |                  |                                    |",
+    // NAME                   | PG | TEXT                | TITLE                              | SUBJECT    | CREATOR                       | AUTHOR           | PRODUCER                           |
+    "pdf-1p-v1.4-by-dist.pdf  |  1 | ItalicLine 8        | Microsoft Word - sampleForSpec.rtf |            | Acrobat PDFMaker 6.0 for Word | Michel Felix     | Acrobat Distiller 6.0 (Windows)    |",
+    "pdf-1p-v1.4-by-oo.pdf    |  1 | Security Threat     |                                    |            | Writer                        |                  | OpenOffice 4.1.2                   |",
+    "pdf-1p-v1.5-text.pdf     |  1 | PDF Overlay Seite 1 |                                    |            |                               |                  |                                    |",
+    "pdf-1p-v1.7-by-pdf24.pdf |  1 | VIELEN DANK         | Test                               | My Subject | PDF24 Creator                 | giraone          | GPL Ghostscript 10.08.0            |",
+    "pdf-2p-v1.3-text.pdf     |  2 | Carogne             | Erlkönig.pages                     |            | Pages                         |                  | Mac OS X 10.11.1 Quartz PDFContext |",
+    "pdf-3p-v1.3-by-FPDF.pdf  |  3 | NVIDIA GeForce      |                                    |            |                               |                  | FPDF 1.53                          |",
+    "pdf-3p-v1.3-props.pdf    |  3 | Three long pages    | Sample PDF                         | ''         | Word                          | Philip Hutchison | Mac OS X 10.11.3 Quartz PDFContext |",
+    "pdf-28p-v1.3-text.pdf    | 28 | Chinese foo         |                                    |            | TeX                           |                  | pdfTeX-0.14f                       |",
+    "pdf-1p-v2.0.pdf          |  1 | Hello World         |                                    |            |                               |                  |                                    |",
     }, delimiter = '|')
     void basicAssertions_basicallyWork(String fileName, int expectedPages,
-                                       String expectedText, String expectedTitle,
+                                       String expectedText, String expectedTitle, String expectedSubject,
                                        String expectedCreator, String expectedAuthor, String expectedProducer) throws IOException {
 
         // arrange
@@ -39,9 +40,10 @@ class PdfContentAssertionTest {
                 .hasNumberOfPages(expectedPages)
                 .containsTextStringOnAnyPage(expectedText)
                 .assertDocumentTitle(value -> Assertions.assertThat(value).isEqualTo(expectedTitle))
+                .assertDocumentSubject(value -> Assertions.assertThat(value).isEqualTo(expectedSubject))
                 .assertDocumentCreator(value -> Assertions.assertThat(value).isEqualTo(expectedCreator))
-                .assertDocumentProducer(value -> Assertions.assertThat(value).isEqualTo(expectedProducer))
                 .assertDocumentAuthor(value -> Assertions.assertThat(value).isEqualTo(expectedAuthor))
+                .assertDocumentProducer(value -> Assertions.assertThat(value).isEqualTo(expectedProducer))
         ;
     }
 
