@@ -1,4 +1,10 @@
-# pdf-assertions
+[![GitHub license](https://img.shields.io/github/license/giraone/pdf-assertions)](https://github.com/giraone/pdf-assertions/blob/master/LICENSE)
+[![Maven Central](https://img.shields.io/badge/Maven%20Central-1.0.0-blue)](https://mvnrepository.com/artifact/com.giraone.imaging/pdf-assertions)
+[![GitHub issues](https://img.shields.io/github/issues/giraone/pdf-assertions)](https://github.com/giraone/pdf-assertions/issues)
+[![GitHub stars](https://img.shields.io/github/stars/giraone/pdf-assertions)](https://github.com/giraone/pdf-assertions/stargazers)
+[![Platform](https://img.shields.io/badge/platform-jre21%2B-blue)](https://github.com/giraone/pdf-assertions/pom.xml)
+
+# PDF Assertion Lib
 
 [AssertJ](https://assertj.github.io/doc/) style custom assertions for PDF documents. The goal is to verify the content
 of generated PDFs in unit tests: validity, number of pages, document metadata (info dictionary and XMP),
@@ -10,10 +16,11 @@ The PDF is parsed only once per assertion chain.
 ## Technologies
 
 - Java 25
-- [Apache PDFBox](https://pdfbox.apache.org/) 3.x (text extraction with positions) and PDFBox Preflight (PDF/A validation)
-- [AssertJ](https://assertj.github.io/doc/) (base of the custom assertion)
-- JUnit 5 (tests only)
-- Maven (build, release to Maven Central)
+- [Apache PDFBox](https://pdfbox.apache.org/): for text extraction with positions basic PDF/A validation (*PDFBox Preflight*)
+- [veraPDF](https://github.com/verapdf/): for PDF/A validation against different PDF/A profiles
+- [AssertJ](https://assertj.github.io/doc/): base of the custom assertions
+- JUnit 5: test framework
+- Maven: build, release to Maven Central
 
 ## Maven coordinates
 
